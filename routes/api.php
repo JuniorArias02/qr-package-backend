@@ -17,6 +17,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/change-password', [AuthController::class, 'changePassword']);
     Route::get('/user', [AuthController::class, 'user']);
 
+    // Dashboard statistics
+    Route::get('/statistics', [PackageController::class, 'statistics']);
+
     Route::apiResource('packages', PackageController::class);
     Route::post('/packages/check-qr', [PackageController::class, 'checkQr']);
     Route::apiResource('scans', ScanController::class)->only(['index', 'store']);
