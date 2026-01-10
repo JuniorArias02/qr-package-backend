@@ -47,7 +47,7 @@ class PackageController extends Controller
                     'id' => $package->id,
                     'package' => $package->referencia_qr,
                     'action' => $this->getActionFromStatus($package->estado),
-                    'time' => $this->getRelativeTime($package->created_at),
+                    'time' => $package->created_at, // Send raw UTC timestamp
                     'status' => $this->getStatusType($package->estado),
                 ];
             });
