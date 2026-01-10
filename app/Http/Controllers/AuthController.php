@@ -191,4 +191,27 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Contraseña actualizada exitosamente']);
     }
+    public function createUser(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|min:6|confirmed',
+            'rol' => 'nullable|string|in:admin,repartidor,usuario',
+            'codigo_personal' => 'nullable|string|max:255',
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'rol' => $request->rol ?? 'usuario',
+            'codigo_personal' => $request->codigo_personal,
+        ]);
+
+        return response()->json([
+            'message' => 'Usuario creado exitosamente',
+            'user' => $user
+        ], 201);
+    }
 }

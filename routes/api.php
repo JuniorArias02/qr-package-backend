@@ -17,6 +17,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/change-password', [AuthController::class, 'changePassword']);
     Route::post('/update-profile', [AuthController::class, 'updateProfile']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::post('/users', [AuthController::class, 'createUser']);
 
     // Dashboard statistics
     Route::get('/statistics', [PackageController::class, 'statistics']);
