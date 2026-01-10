@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 
+// API Status Route
+
 Route::get('/', function () {
     return response()->json([
         'status' => 'online',
