@@ -2,29 +2,20 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Package extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'referencia_qr',
-        'direccion',
-        'nombre_receptor',
-        'telefono_receptor',
-        'estado',
-        'user_id_asignado',
+        'package_reference',
+        'address',
+        'zone',
+        'status',
     ];
 
-    public function assignedUser()
+    public function delivery(): HasOne
     {
-        return $this->belongsTo(User::class, 'user_id_asignado');
-    }
-
-    public function scans()
-    {
-        return $this->hasMany(Scan::class);
+        return $this->hasOne(Delivery::class);
     }
 }

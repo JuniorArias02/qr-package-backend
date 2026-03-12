@@ -5,14 +5,12 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Notifications\Notifiable;
 
-use Laravel\Sanctum\HasApiTokens;
-
-class User extends Authenticatable
+class User extends Authenticatable implements JWTSubject
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -23,18 +21,72 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'rol',
-        'codigo_personal',
+        'role',
+        'active',
+        'profile_image',
     ];
 
-    public function packages()
+    public function coordinator()
     {
-        return $this->hasMany(Package::class, 'user_id_asignado');
+        return $this->hasOne(Coordinator::class);
     }
 
-    public function scans()
+    public function driver()
     {
-        return $this->hasMany(Scan::class);
+        return $this->hasOne(Driver::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isCoordinator(): bool
+    {
+        return $this->role === 'coordinator';
+    }
+
+    public function isDriver(): bool
+    {
+        return $this->role === 'driver';
+    }
+
+    /**
+     * Get the identifier that will be stored in the subject claim of the JWT.
+     *
+     * @return mixed
+     */
+    public function getJWTIdentifier()
+    {
+        return $this->getKey();
+    }
+
+    /**
+     * Return a key value array, containing any custom claims to be added to the JWT.
+     *
+     * @return array
+     */
+    public function getJWTCustomClaims()
+    {
+        return [];
+    }
+
+    /**
+     * Check if user has specific permission through their roles
+     */
+    public function hasPermission(string $permission): bool
+    {
+        return $this->roles->flatMap(function ($role) {
+            return $role->permissions;
+        })->pluck('name')->contains($permission);
+    }
+
+    /**
+     * Check if user has specific role
+     */
+    public function hasRole(string $role): bool
+    {
+        return $this->roles->contains('name', $role);
     }
 
     /**
@@ -57,6 +109,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'active' => 'boolean',
         ];
     }
 }

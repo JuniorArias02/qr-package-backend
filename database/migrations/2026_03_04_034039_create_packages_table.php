@@ -13,15 +13,11 @@ return new class extends Migration
     {
         Schema::create('packages', function (Blueprint $table) {
             $table->id();
-            $table->string('referencia_qr');
-            $table->string('direccion');
-            $table->string('nombre_receptor');
-            $table->string('telefono_receptor');
-            $table->string('estado');
-            $table->unsignedBigInteger('user_id_asignado')->nullable();
+            $table->string('package_reference')->unique();
+            $table->string('address');
+            $table->string('zone');
+            $table->enum('status', ['pending', 'assigned', 'delivered'])->default('pending');
             $table->timestamps();
-
-            $table->foreign('user_id_asignado')->references('id')->on('users')->onDelete('set null');
         });
     }
 
