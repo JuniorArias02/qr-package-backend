@@ -12,8 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->prepend(\App\Http\Middleware\HandleCorsManual::class);
+        $middleware->append(\App\Http\Middleware\DebugLogMiddleware::class);
         $middleware->alias([
-            'permission' => \App\Http\Middleware\CheckPermission::class,
+            'permission'     => \App\Http\Middleware\CheckPermission::class,
+            'company.active' => \App\Http\Middleware\EnsureCompanyActive::class,  // multi-tenant
+            'super_admin'    => \App\Http\Middleware\EnsureSuperAdmin::class,      // solo super admin
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

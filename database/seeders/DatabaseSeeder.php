@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Admin QR',
             'email' => 'admin@qrpackage.com',
             'password' => Hash::make('password'),
-            'role' => 'admin'
+            'role' => 'super_admin'
         ]);
     }
 }

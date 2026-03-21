@@ -53,13 +53,26 @@ class AuthController extends Controller
 
         $user = auth('api')->user();
 
+        // ✅ Verificación existente — usuario activo
         if (!$user->active) {
             auth('api')->logout();
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'mensaje' => 'Su cuenta está inactiva. Por favor contacte al administrador.',
-                'objeto' => null
+                'objeto'  => null
             ], 401);
+        }
+
+        // ✅ Multi-tenant — verificar empresa activa (solo si el usuario pertenece a una)
+        if ($user->company_id && $user->company) {
+            if (!$user->company->active) {
+                auth('api')->logout();
+                return response()->json([
+                    'status'  => 'error',
+                    'mensaje' => 'Su empresa está inactiva. Contacte al administrador del sistema.',
+                    'objeto'  => null
+                ], 403);
+            }
         }
 
         return $this->respondWithToken($token);
@@ -244,7 +257,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'bearer',
                 'expires_in' => auth('api')->factory()->getTTL() * 60,
-                'user' => auth('api')->user()
+                'user' => auth('api')->user()->load('company')
             ]
         ]);
     }

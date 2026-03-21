@@ -5,9 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+use App\Traits\BelongsToCompany;
+
 class Delivery extends Model
 {
+    use BelongsToCompany;
     protected $fillable = [
+        'company_id',
         'package_id',
         'driver_id',
         'coordinator_id',

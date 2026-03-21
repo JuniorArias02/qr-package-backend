@@ -8,9 +8,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Notifications\Notifiable;
 
+use App\Traits\BelongsToCompany;
+
 class User extends Authenticatable implements JWTSubject
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, BelongsToCompany;
 
     /**
      * The attributes that are mass assignable.
@@ -18,6 +20,7 @@ class User extends Authenticatable implements JWTSubject
      * @var list<string>
      */
     protected $fillable = [
+        'company_id',   // multi-tenant
         'name',
         'email',
         'password',
@@ -26,6 +29,8 @@ class User extends Authenticatable implements JWTSubject
         'profile_image',
     ];
 
+
+    // ─── Relaciones existentes ───────────────────────────────────────────────
     public function coordinator()
     {
         return $this->hasOne(Coordinator::class);
@@ -34,6 +39,16 @@ class User extends Authenticatable implements JWTSubject
     public function driver()
     {
         return $this->hasOne(Driver::class);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    public function isCompanyAdmin(): bool
+    {
+        return $this->role === 'company_admin';
     }
 
     public function isAdmin(): bool

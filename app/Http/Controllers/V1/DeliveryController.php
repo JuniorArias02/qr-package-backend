@@ -370,8 +370,12 @@ class DeliveryController extends Controller
                 'observation' => $request->observation,
                 'delivered_at' => now(),
             ]);
-            $delivery->package->update(['status' => 'delivered']);
+            // Ensure child package status is also updated
+            if ($delivery->package) {
+                $delivery->package->update(['status' => 'delivered']);
+            }
         } else {
+            // Treat as failure or other observation
             $delivery->update([
                 'observation' => $request->observation,
             ]);
@@ -448,6 +452,69 @@ class DeliveryController extends Controller
                 'delivery' => $delivery,
                 'package' => $package
             ]
+        ]);
+    }
+
+    /**
+     * Get history of deliveries for the authenticated driver.
+     */
+    public function getHistory()
+    {
+        $user = auth('api')->user();
+        if (!$user->driver) {
+            return response()->json(['status' => 'error', 'mensaje' => 'User is not a driver'], 403);
+        }
+
+        $deliveries = \App\Models\Delivery::with('package')
+            ->where('driver_id', $user->driver->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Transform data to match frontend expectations (referencia_qr, estado, nombre_receptor)
+        $mapped = $deliveries->map(function ($delivery) {
+            $estado = 'Assigned';
+            if ($delivery->status === 'delivered') {
+                $estado = 'Delivered';
+            } elseif ($delivery->observation) {
+                $estado = 'Failed';
+            }
+
+            return [
+                'id' => $delivery->id,
+                'referencia_qr' => $delivery->package->package_reference,
+                'nombre_receptor' => 'QR Client', // Fallback
+                'direccion' => $delivery->package->address,
+                'estado' => $estado,
+                'fecha' => $delivery->created_at->format('Y-m-d'),
+                'hora' => $delivery->delivered_at ? $delivery->delivered_at->format('H:i') : null,
+                'objeto_original' => $delivery // Keep original for details if needed
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'objeto' => $mapped
+        ]);
+    }
+
+    /**
+     * Get currently assigned (not delivered) packages for the driver.
+     */
+    public function getAssigned()
+    {
+        $user = auth('api')->user();
+        if (!$user->driver) {
+            return response()->json(['status' => 'error', 'mensaje' => 'User is not a driver'], 403);
+        }
+
+        $deliveries = \App\Models\Delivery::with('package')
+            ->where('driver_id', $user->driver->id)
+            ->where('status', 'assigned')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'objeto' => $deliveries
         ]);
     }
 }

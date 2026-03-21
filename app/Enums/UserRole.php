@@ -4,10 +4,14 @@ namespace App\Enums;
 
 enum UserRole: string
 {
-    case ADMIN = 'admin';
+    // Roles multi-tenant (nuevos)
+    case SUPER_ADMIN   = 'super_admin';
+    case COMPANY_ADMIN = 'company_admin';
+
+    // Roles existentes (sin cambios)
     case COORDINATOR = 'coordinator';
-    case DRIVER = 'driver';
-    case REPORTER = 'reporter';
+    case DRIVER      = 'driver';
+    
 
     /**
      * Get human-readable label
@@ -15,10 +19,12 @@ enum UserRole: string
     public function label(): string
     {
         return match ($this) {
-            self::ADMIN => 'Administrador',
-            self::COORDINATOR => 'Coordinador',
-            self::DRIVER => 'Transportador',
-            self::REPORTER => 'Reportero',
+            self::SUPER_ADMIN   => 'Super Administrador',
+            self::COMPANY_ADMIN => 'Admin de Empresa',
+            self::ADMIN         => 'Administrador',
+            self::COORDINATOR   => 'Coordinador',
+            self::DRIVER        => 'Transportador',
+            self::REPORTER      => 'Reportero',
         };
     }
 

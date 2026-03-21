@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('role', ['admin', 'coordinator', 'driver'])->default('driver');
+            $table->enum('role', ['super_admin', 'company_admin', 'admin', 'coordinator', 'driver', 'reporter'])->default('driver');
             $table->boolean('active')->default(true);
             $table->string('profile_image')->nullable();
             $table->rememberToken();
