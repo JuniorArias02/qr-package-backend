@@ -12,6 +12,7 @@ use App\Http\Controllers\V1\DriverAnalyticsController;
 use App\Http\Controllers\V1\SuperAdminCompanyController;
 use App\Http\Controllers\V1\SuperAdminUserController;
 use App\Http\Controllers\V1\SuperAdminController;
+use App\Http\Controllers\V1\RouteController;
 
 Route::prefix('v1')->group(function () {
 
@@ -78,8 +79,16 @@ Route::prefix('v1')->group(function () {
         });
     });
 
+    // Routes Management
+    Route::group(['prefix' => 'routes', 'middleware' => ['auth:api', 'company.active']], function () {
+        Route::get('/', [RouteController::class, 'index']);
+        Route::post('/', [RouteController::class, 'store']);
+        Route::post('{id}/points', [RouteController::class, 'addPoint']);
+    });
+
     // Delivery Flow Routes
     Route::group(['prefix' => 'delivery', 'middleware' => ['auth:api', 'company.active']], function () {
+        Route::get('pending', [DeliveryController::class, 'getPending']);
         Route::get('my-deliveries', [DeliveryController::class, 'getMyDeliveries']);
         Route::get('assigned', [DeliveryController::class, 'getAssigned']);
         Route::get('history', [DeliveryController::class, 'getHistory']);

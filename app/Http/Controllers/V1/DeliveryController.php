@@ -141,15 +141,17 @@ class DeliveryController extends Controller
         $delivery = $this->deliveryService->createDelivery($package, $driver, $coordinator);
 
         $dayIdentifier = now()->format('Ymd');
-        $orderNumber = $this->calculateDriverOrderNumber($driver->id);
+        $orderNumber = $driver ? $this->calculateDriverOrderNumber($driver->id) : 0;
         
         $trackingUrl = $this->generateTrackingUrl($package->package_reference, $delivery->id);
         
         $labelImageBase64 = $this->generateCompositeLabelBase64($trackingUrl, $dayIdentifier, $orderNumber);
 
+        $assignedName = $driver ? $driver->user->name : 'ninguno (Pendiente de Asignación)';
+
         return response()->json([
             'status' => 'success',
-            'mensaje' => 'Package successfully assigned to ' . $driver->user->name,
+            'mensaje' => 'Package successfully processed. Assigned to: ' . $assignedName,
             'objeto' => [
                 'delivery' => $delivery,
                 'assignment_mode' => $mode,
@@ -235,10 +237,10 @@ class DeliveryController extends Controller
         }
 
         // Validate package status
-        if ($package->status !== 'pending') {
+        if ($package->status !== 'pending' && $package->status !== 'assigned') {
             return response()->json([
                 'status' => 'error',
-                'mensaje' => 'The package is already assigned or delivered',
+                'mensaje' => 'The package is already delivered or in an invalid state',
                 'objeto' => null
             ], 422);
         }
@@ -250,6 +252,26 @@ class DeliveryController extends Controller
                 'mensaje' => 'Invalid or inactive driver selected',
                 'objeto' => null
             ], 422);
+        }
+
+        // If delivery already exists (was pending), update it instead of creating a new one
+        $existingDelivery = \App\Models\Delivery::where('package_id', $package->id)->first();
+        if ($existingDelivery) {
+            $existingDelivery->update([
+                'driver_id' => $driver->id,
+                'status' => \App\Enums\DeliveryStatus::ASSIGNED->value,
+                'assigned_at' => now(),
+            ]);
+            $package->update(['status' => 'assigned']);
+            
+            return response()->json([
+                'status' => 'success',
+                'mensaje' => 'Package successfully assigned to ' . $driver->user->name,
+                'objeto' => [
+                    'delivery' => $existingDelivery->load(['package', 'driver.user', 'route']),
+                    'assignment_mode' => 'manual',
+                ]
+            ]);
         }
 
         $mode = $this->settingService->getAssignmentMode();
@@ -306,19 +328,7 @@ class DeliveryController extends Controller
             $driver = $this->deliveryService->getAvailableDriver($coordinator);
         }
 
-        if (!$driver) {
-            return response()->json([
-                'status' => 'success',
-                'mensaje' => 'Package registered but no driver assigned yet',
-                'objeto' => [
-                    'package' => $package,
-                    'delivery' => null,
-                    'assignment_mode' => $mode,
-                    'available_drivers' => $coordinator->drivers()->where('active', true)->with('user')->get()
-                ]
-            ], 201);
-        }
-
+        // We now allow $driver to be null. processPackageAssignment will create the delivery in pending_assignment state.
         return $this->processPackageAssignment($package, $driver, $coordinator, $mode);
     }
 
@@ -514,6 +524,38 @@ class DeliveryController extends Controller
 
         return response()->json([
             'status' => 'success',
+            'objeto' => $deliveries
+        ]);
+    }
+
+    #[OA\Get(
+        path: "/api/v1/delivery/pending",
+        summary: "Get list of pending assignment deliveries",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        responses: [
+            new OA\Response(response: 200, description: "List of pending deliveries")
+        ]
+    )]
+    public function getPending()
+    {
+        $user = auth('api')->user();
+        
+        if (!in_array($user->role, ['coordinator', 'admin', 'company_admin', 'super_admin'])) {
+            return response()->json(['status' => 'error', 'mensaje' => 'Unauthorized to view pending deliveries'], 403);
+        }
+
+        $deliveries = \App\Models\Delivery::with(['package.address', 'route'])
+            ->where(function ($query) {
+                $query->where('status', \App\Enums\DeliveryStatus::PENDING_ASSIGNMENT->value)
+                      ->orWhereNull('driver_id');
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'mensaje' => 'Pending deliveries retrieved',
             'objeto' => $deliveries
         ]);
     }

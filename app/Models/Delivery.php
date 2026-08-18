@@ -16,6 +16,7 @@ class Delivery extends Model
         'driver_id',
         'coordinator_id',
         'daily_batch_id',
+        'route_id',
         'delivery_order',
         'qr_url',
         'status',
@@ -47,5 +48,10 @@ class Delivery extends Model
     public function dailyBatch(): BelongsTo
     {
         return $this->belongsTo(DailyBatch::class);
+    }
+
+    public function route(): BelongsTo
+    {
+        return $this->belongsTo(Route::class);
     }
 }

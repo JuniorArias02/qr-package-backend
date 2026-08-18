@@ -12,6 +12,153 @@
         }
     ],
     "paths": {
+        "/api/v1/admin/coordinators": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List all coordinators",
+                "operationId": "b50e4958700f912ca31bb22c25d77aba",
+                "responses": {
+                    "200": {
+                        "description": "List of coordinators retrieved"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Create a new coordinator",
+                "operationId": "8c59a6bb14278c0e729ae3ffc51c97f3",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Coordinator created successfully"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/coordinators/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get a specific coordinator",
+                "operationId": "ead4d9bc6c1bc3134b80278792427da9",
+                "responses": {
+                    "200": {
+                        "description": "Coordinator details retrieved"
+                    },
+                    "404": {
+                        "description": "Coordinator not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update a coordinator",
+                "operationId": "a0a88e9b8edbfd676825440e6e4ae911",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    },
+                                    "active": {
+                                        "type": "boolean"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Coordinator updated successfully"
+                    },
+                    "404": {
+                        "description": "Coordinator not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/stats": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get coordinator productivity stats",
+                "operationId": "a99c3def54f3f0c33e154467c1b67b89",
+                "responses": {
+                    "200": {
+                        "description": "Stats retrieved"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "tags": [
@@ -110,6 +257,93 @@
                 ]
             }
         },
+        "/api/v1/auth/profile": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Update authenticated user profile",
+                "operationId": "64ad0bc41010829956d856a875ba8d51",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "John Updated"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john.updated@example.com"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newsecret123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Profile updated successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/profile-photo": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Update authenticated user profile photo",
+                "operationId": "8c8e37303fab40e8361bf9ce61f12ef8",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "photo": {
+                                        "description": "Profile photo (max 15MB)",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Photo updated successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/api/v1/auth/logout": {
             "post": {
                 "tags": [
@@ -148,13 +382,295 @@
                 ]
             }
         },
+        "/api/v1/coordinator/stats": {
+            "get": {
+                "tags": [
+                    "Coordinator"
+                ],
+                "summary": "Get stats for all drivers",
+                "operationId": "ebb98142f97066dee10248e5766efdcc",
+                "responses": {
+                    "200": {
+                        "description": "Stats retrieved"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/delivery/scan": {
+            "post": {
+                "tags": [
+                    "Delivery"
+                ],
+                "summary": "Identify package via QR scan and handle automatic/manual assignment",
+                "operationId": "1c5de35ff0146cfcc0ec6856ff7fd842",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "package_reference": {
+                                        "type": "string",
+                                        "example": "PKG-12345"
+                                    },
+                                    "driver_id": {
+                                        "description": "Optional for manual assignment from frontend",
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Package identified and potentially assigned"
+                    },
+                    "404": {
+                        "description": "Package not found"
+                    },
+                    "422": {
+                        "description": "Package already assigned or no drivers available"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/delivery/assign": {
+            "post": {
+                "tags": [
+                    "Delivery"
+                ],
+                "summary": "Manually assign package to driver",
+                "operationId": "eb2479d4d3cfb478487191f383abbbb1",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "package_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "driver_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Package assigned successfully"
+                    },
+                    "422": {
+                        "description": "Constraints violated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/delivery/register-package": {
+            "post": {
+                "tags": [
+                    "Delivery"
+                ],
+                "summary": "Register a new package and assign it",
+                "operationId": "9832bab95a8a3ee7680c7f1f5d9a06f1",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "package_reference": {
+                                        "type": "string",
+                                        "example": "PKG-12345"
+                                    },
+                                    "address": {
+                                        "type": "string",
+                                        "example": "123 Main St"
+                                    },
+                                    "driver_id": {
+                                        "description": "Optional for automatic mode",
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Package registered and assigned"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/delivery/{id}/delivered": {
+            "post": {
+                "tags": [
+                    "Delivery"
+                ],
+                "summary": "Mark package as delivered",
+                "operationId": "28f0556fb2c85a4b02e7f1db2551f236",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "observation": {
+                                        "type": "string",
+                                        "example": "Delivered to neighbor"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Package marked as delivered"
+                    },
+                    "422": {
+                        "description": "Already delivered or error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/delivery/info/{package_reference}/{delivery_id}": {
+            "get": {
+                "tags": [
+                    "Delivery"
+                ],
+                "summary": "Get full details of a delivery by scanning",
+                "operationId": "9066916a53fb5e46b95323faf9e869cd",
+                "parameters": [
+                    {
+                        "name": "package_reference",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "delivery_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Delivery details retrieved"
+                    },
+                    "404": {
+                        "description": "Delivery not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/delivery/pending": {
+            "get": {
+                "tags": [
+                    "Delivery"
+                ],
+                "summary": "Get list of pending assignment deliveries",
+                "operationId": "789cc89b5f9320c114e65dce414f0e5d",
+                "responses": {
+                    "200": {
+                        "description": "List of pending deliveries"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/driver/analytics/dashboard": {
+            "get": {
+                "tags": [
+                    "Driver Analytics"
+                ],
+                "summary": "Get full analytics data for driver dashboard",
+                "operationId": "bccfeda6ef72b04701466fa9fadf7130",
+                "responses": {
+                    "200": {
+                        "description": "Analytics data retrieved successfully"
+                    },
+                    "403": {
+                        "description": "User is not a driver"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/api/v1/coordinator/drivers": {
             "get": {
                 "tags": [
                     "Coordinator"
                 ],
                 "summary": "List all drivers for the current coordinator",
-                "operationId": "8be1188224d41fe2abd501c7d61bcd4e",
+                "operationId": "4cd104789f6da039d363837ebb357359",
                 "responses": {
                     "200": {
                         "description": "List of drivers retrieved",
@@ -190,7 +706,7 @@
                     "Coordinator"
                 ],
                 "summary": "Create a new driver",
-                "operationId": "8764ed5f4756c0589928f5357cb61493",
+                "operationId": "256aa9305f8c46421654e9c6c05b5de7",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -237,35 +753,19 @@
                 ]
             }
         },
-        "/api/v1/delivery/scan": {
-            "post": {
+        "/api/v1/coordinator/drivers/{id}": {
+            "get": {
                 "tags": [
-                    "Delivery"
+                    "Coordinator"
                 ],
-                "summary": "Identify package via QR scan",
-                "operationId": "1c5de35ff0146cfcc0ec6856ff7fd842",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "package_reference": {
-                                        "type": "string",
-                                        "example": "PKG-12345"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
+                "summary": "Get a specific driver",
+                "operationId": "37c80fe2b1859c3bea16c0319cea79e6",
                 "responses": {
                     "200": {
-                        "description": "Package identified"
+                        "description": "Driver details retrieved"
                     },
                     "404": {
-                        "description": "Package not found"
+                        "description": "Driver not found"
                     }
                 },
                 "security": [
@@ -273,28 +773,30 @@
                         "bearerAuth": []
                     }
                 ]
-            }
-        },
-        "/api/v1/delivery/assign": {
+            },
             "post": {
                 "tags": [
-                    "Delivery"
+                    "Coordinator"
                 ],
-                "summary": "Assign package to driver",
-                "operationId": "eb2479d4d3cfb478487191f383abbbb1",
+                "summary": "Update a driver",
+                "operationId": "87f7f97b52f3808a975f3db5a0a6f0ca",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "properties": {
-                                    "package_id": {
-                                        "type": "integer",
-                                        "example": 1
+                                    "name": {
+                                        "type": "string"
                                     },
-                                    "driver_id": {
-                                        "type": "integer",
-                                        "example": 1
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    },
+                                    "active": {
+                                        "type": "boolean"
                                     }
                                 },
                                 "type": "object"
@@ -304,10 +806,27 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Package assigned successfully"
+                        "description": "Driver updated successfully"
                     },
-                    "422": {
-                        "description": "Package already assigned or error"
+                    "404": {
+                        "description": "Driver not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Coordinator"
+                ],
+                "summary": "Delete a driver",
+                "operationId": "9136efbcdd1807c3bba3a264a51982e6",
+                "responses": {
+                    "200": {
+                        "description": "Driver deleted successfully"
                     }
                 },
                 "security": [
@@ -317,13 +836,96 @@
                 ]
             }
         },
-        "/api/v1/delivery/{id}/delivered": {
+        "/api/v1/routes": {
+            "get": {
+                "tags": [
+                    "Routes"
+                ],
+                "summary": "List all routes for the current company",
+                "operationId": "a93aa12b731b88ebc7faf84efd2a7f68",
+                "responses": {
+                    "200": {
+                        "description": "Routes retrieved successfully"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
             "post": {
                 "tags": [
-                    "Delivery"
+                    "Routes"
                 ],
-                "summary": "Mark package as delivered",
-                "operationId": "b87fee5b5b6640545ae08705d46184ea",
+                "summary": "Create a new route with optional geofence points",
+                "operationId": "19715bae84b5c5c7105e829800785ae6",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Ruta Norte"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Cobertura zona norte y alrededores"
+                                    },
+                                    "active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "points": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "latitude": {
+                                                    "type": "number",
+                                                    "example": 4.60971
+                                                },
+                                                "longitude": {
+                                                    "type": "number",
+                                                    "example": -74.08175
+                                                },
+                                                "radius_km": {
+                                                    "type": "number",
+                                                    "example": 3.5
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Route created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/routes/{id}/points": {
+            "post": {
+                "tags": [
+                    "Routes"
+                ],
+                "summary": "Add a geofence point to an existing route",
+                "operationId": "35b9e2c89ea7716a67f3278b83c088b8",
                 "parameters": [
                     {
                         "name": "id",
@@ -335,13 +937,22 @@
                     }
                 ],
                 "requestBody": {
+                    "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "properties": {
-                                    "observation": {
-                                        "type": "string",
-                                        "example": "Delivered to neighbor"
+                                    "latitude": {
+                                        "type": "number",
+                                        "example": 4.60971
+                                    },
+                                    "longitude": {
+                                        "type": "number",
+                                        "example": -74.08175
+                                    },
+                                    "radius_km": {
+                                        "type": "number",
+                                        "example": 2
                                     }
                                 },
                                 "type": "object"
@@ -350,11 +961,11 @@
                     }
                 },
                 "responses": {
-                    "200": {
-                        "description": "Package marked as delivered"
+                    "201": {
+                        "description": "Point added to route successfully"
                     },
-                    "422": {
-                        "description": "Already delivered or error"
+                    "404": {
+                        "description": "Route not found"
                     }
                 },
                 "security": [
@@ -376,6 +987,10 @@
     },
     "tags": [
         {
+            "name": "Admin",
+            "description": "Admin"
+        },
+        {
             "name": "Auth",
             "description": "Auth"
         },
@@ -386,6 +1001,14 @@
         {
             "name": "Delivery",
             "description": "Delivery"
+        },
+        {
+            "name": "Driver Analytics",
+            "description": "Driver Analytics"
+        },
+        {
+            "name": "Routes",
+            "description": "Routes"
         }
     ]
 }

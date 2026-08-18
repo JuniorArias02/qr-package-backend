@@ -89,7 +89,7 @@ class SuperAdminUserController extends Controller
         return response()->json([
             'status' => 'success',
             'mensaje' => "Usuario {$estado} correctamente",
-            'objeto' => $user
+            'objeto' => null
         ]);
     }
 }
