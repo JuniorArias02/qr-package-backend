@@ -91,6 +91,12 @@ class SuperAdminCompanyController extends Controller
             'active'  => $request->input('active', true),
         ]);
 
+        // Notify all super admins
+        $superAdmins = \App\Models\User::where('role', 'super_admin')->get();
+        foreach ($superAdmins as $admin) {
+            $admin->notify(new \App\Notifications\NewCompanyRegistered($company));
+        }
+
         return response()->json([
             'status'  => 'success',
             'mensaje' => 'Empresa creada exitosamente',

@@ -16,15 +16,18 @@ class DeliveryController extends Controller
     protected $deliveryService;
     protected $packageService;
     protected $settingService;
+    protected $intelligentAssignmentService;
 
     public function __construct(
         DeliveryService $deliveryService,
         PackageService $packageService,
-        SystemSettingService $settingService
+        SystemSettingService $settingService,
+        \App\Services\IntelligentAssignmentService $intelligentAssignmentService
     ) {
         $this->deliveryService = $deliveryService;
         $this->packageService = $packageService;
         $this->settingService = $settingService;
+        $this->intelligentAssignmentService = $intelligentAssignmentService;
     }
 
     #[OA\Post(
@@ -65,7 +68,7 @@ class DeliveryController extends Controller
         $validationResponse = $this->validatePackageForScan($package, $mode);
         if ($validationResponse) return $validationResponse;
 
-        $driverResult = $this->resolveDriverForScan($request, $mode, $coordinator);
+        $driverResult = $this->resolveDriverForScan($request, $mode, $coordinator, $package);
 
         if ($driverResult === null) {
             return $this->driverSelectionResponse($package, $mode, $coordinator);
@@ -103,10 +106,10 @@ class DeliveryController extends Controller
         return null; // Validado correctamente
     }
 
-    private function resolveDriverForScan(Request $request, $mode, $coordinator)
+    private function resolveDriverForScan(Request $request, $mode, $coordinator, $package = null)
     {
         if ($mode === 'automatic') {
-            $driver = $this->deliveryService->getAvailableDriver($coordinator);
+            $driver = $this->deliveryService->getAvailableDriver($coordinator, $package);
             return $driver ?: ['error' => 'No active drivers available for automatic assignment'];
         }
 
@@ -147,7 +150,11 @@ class DeliveryController extends Controller
         
         $labelImageBase64 = $this->generateCompositeLabelBase64($trackingUrl, $dayIdentifier, $orderNumber);
 
-        $assignedName = $driver ? $driver->user->name : 'ninguno (Pendiente de Asignación)';
+        $assignedName = 'ninguno (Pendiente de Asignación)';
+        if ($driver && $driver->user) {
+            $assignedName = $driver->user->name;
+            $driver->user->notify(new \App\Notifications\NewPackageAssigned($package));
+        }
 
         return response()->json([
             'status' => 'success',
@@ -264,12 +271,20 @@ class DeliveryController extends Controller
             ]);
             $package->update(['status' => 'assigned']);
             
+            if ($driver && $driver->user) {
+                $driver->user->notify(new \App\Notifications\NewPackageAssigned($package));
+            }
+            
+            $impact = $this->deliveryService->evaluateDriverImpact($package, $driver, $coordinator);
+            $impactMsg = $impact ? sprintf(' (Impacto: +%.2f km, +%.1f min)', $impact['increase_distance_km'], $impact['increase_time_min']) : '';
+
             return response()->json([
                 'status' => 'success',
-                'mensaje' => 'Package successfully assigned to ' . $driver->user->name,
+                'mensaje' => 'Package successfully assigned to ' . $driver->user->name . $impactMsg,
                 'objeto' => [
                     'delivery' => $existingDelivery->load(['package', 'driver.user', 'route']),
                     'assignment_mode' => 'manual',
+                    'impact' => $impact
                 ]
             ]);
         }
@@ -325,7 +340,7 @@ class DeliveryController extends Controller
         if ($request->driver_id) {
             $driver = Driver::find($request->driver_id);
         } elseif ($mode === 'automatic') {
-            $driver = $this->deliveryService->getAvailableDriver($coordinator);
+            $driver = $this->deliveryService->getAvailableDriver($coordinator, $package);
         }
 
         // We now allow $driver to be null. processPackageAssignment will create the delivery in pending_assignment state.
@@ -389,6 +404,11 @@ class DeliveryController extends Controller
             $delivery->update([
                 'observation' => $request->observation,
             ]);
+
+            // Notify coordinator about the issue
+            if ($delivery->coordinator && $delivery->coordinator->user) {
+                $delivery->coordinator->user->notify(new \App\Notifications\DriverReportedIssue($delivery));
+            }
         }
 
         return response()->json([
@@ -405,7 +425,7 @@ class DeliveryController extends Controller
             return response()->json(['status' => 'error', 'mensaje' => 'User is not a driver'], 403);
         }
 
-        $deliveries = \App\Models\Delivery::with('package')
+        $deliveries = \App\Models\Delivery::with('package.geocodedAddress')
             ->where('driver_id', $user->driver->id)
             ->whereDate('created_at', now())
             ->get();
@@ -545,7 +565,7 @@ class DeliveryController extends Controller
             return response()->json(['status' => 'error', 'mensaje' => 'Unauthorized to view pending deliveries'], 403);
         }
 
-        $deliveries = \App\Models\Delivery::with(['package.address', 'route'])
+        $deliveries = \App\Models\Delivery::with(['package.geocodedAddress', 'route'])
             ->where(function ($query) {
                 $query->where('status', \App\Enums\DeliveryStatus::PENDING_ASSIGNMENT->value)
                       ->orWhereNull('driver_id');
@@ -558,5 +578,67 @@ class DeliveryController extends Controller
             'mensaje' => 'Pending deliveries retrieved',
             'objeto' => $deliveries
         ]);
+    }
+
+    #[OA\Post(
+        path: "/api/v1/delivery/generate-batch",
+        summary: "Generate and assign batch routes from a branch",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: "branch_id", type: "integer", example: 1),
+                    new OA\Property(property: "package_ids", type: "array", items: new OA\Items(type: "integer")),
+                    new OA\Property(property: "driver_ids", type: "array", items: new OA\Items(type: "integer"))
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: "Batch routes generated"),
+            new OA\Response(response: 422, description: "Validation error")
+        ]
+    )]
+    public function generateBatchRoutes(Request $request)
+    {
+        $request->validate([
+            'branch_id' => 'required|exists:branches,id',
+            'package_ids' => 'required|array|min:1',
+            'package_ids.*' => 'exists:packages,id',
+            'driver_ids' => 'required|array|min:1',
+            'driver_ids.*' => 'exists:drivers,id',
+        ]);
+
+        $coordinator = auth('api')->user()->coordinator;
+        
+        if (!$coordinator) {
+            return response()->json(['status' => 'error', 'mensaje' => 'Only coordinators can generate routes'], 403);
+        }
+
+        try {
+            $branch = \App\Models\Branch::with('address')->findOrFail($request->branch_id);
+            $packages = \App\Models\Package::with('geocodedAddress')->whereIn('id', $request->package_ids)->get()->all();
+            $drivers = \App\Models\Driver::whereIn('id', $request->driver_ids)->get()->all();
+
+            $optimizedResults = $this->intelligentAssignmentService->generateOptimizedRoutes($branch, $packages, $drivers);
+            
+            if (empty($optimizedResults)) {
+                return response()->json(['status' => 'error', 'mensaje' => 'Failed to generate optimized routes'], 500);
+            }
+
+            $this->deliveryService->assignBatchRoutes($optimizedResults, $coordinator, $branch->id);
+
+            return response()->json([
+                'status' => 'success',
+                'mensaje' => 'Rutas generadas y asignadas correctamente.',
+                'objeto' => [
+                    'total_packages_assigned' => count($packages),
+                    'drivers_assigned' => count($drivers)
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'mensaje' => $e->getMessage()], 500);
+        }
     }
 }

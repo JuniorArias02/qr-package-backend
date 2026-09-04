@@ -28,7 +28,7 @@ class GeoapifyProvider implements GeocodingProviderInterface
         }
 
         try {
-            $response = Http::timeout(5)->get($this->baseUrl, [
+            $response = Http::withoutVerifying()->timeout(5)->get($this->baseUrl, [
                 'text' => $address,
                 'apiKey' => $this->apiKey,
                 'limit' => 1,

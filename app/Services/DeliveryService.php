@@ -16,7 +16,8 @@ class DeliveryService
 {
     public function __construct(
         protected AddressService $addressService,
-        protected RouteMatchingService $routeMatchingService
+        protected RouteMatchingService $routeMatchingService,
+        protected IntelligentAssignmentService $intelligentAssignmentService
     ) {}
 
     /**
@@ -30,7 +31,7 @@ class DeliveryService
                 $address = $this->addressService->findOrCreateAddress($package->address);
                 $package->update(['address_id' => $address->id]);
             } else {
-                $address = $package->address;
+                $address = $package->geocodedAddress;
             }
 
             // 2. Spatial Route Matching
@@ -74,33 +75,111 @@ class DeliveryService
             $packageStatus = $isDriverAssigned ? 'assigned' : 'pending';
             $package->update(['status' => $packageStatus]);
 
-            return $delivery->load(['package.address', 'driver.user', 'route']);
+            return $delivery->load(['package.geocodedAddress', 'driver.user', 'route']);
         });
     }
 
     /**
-     * Finds an available (active) driver for the given coordinator.
+     * Finds an available (active) driver for the given coordinator and package.
      */
-    public function getAvailableDriver(Coordinator $coordinator): ?Driver
+    public function getAvailableDriver(Coordinator $coordinator, ?Package $package = null): ?Driver
     {
+        if ($package) {
+            $batch = $this->getOrCreateDailyBatch($coordinator->company_id);
+            $bestDriverResult = $this->intelligentAssignmentService->findBestDriver($package, $batch->id, $coordinator->company_id);
+            
+            if ($bestDriverResult && isset($bestDriverResult['driver'])) {
+                // Return the driver that minimizes marginal cost
+                return $bestDriverResult['driver'];
+            }
+        }
+
+        // Fallback to the first active driver if no package or intelligent routing fails
         return $coordinator->drivers()
             ->where('active', true)
             ->first();
     }
 
     /**
+     * Evaluates the impact of manually assigning a package to a specific driver.
+     */
+    public function evaluateDriverImpact(Package $package, Driver $driver, Coordinator $coordinator): ?array
+    {
+        $batch = $this->getOrCreateDailyBatch($coordinator->company_id);
+        return $this->intelligentAssignmentService->evaluateDriver($package, $driver, $batch->id);
+    }
+
+    /**
      * Get or create the batch for the current day.
      */
-    protected function getOrCreateDailyBatch(?int $companyId = null): DailyBatch
+    protected function getOrCreateDailyBatch(?int $companyId = null, ?int $branchId = null): DailyBatch
     {
         $todayCode = Carbon::now()->format('Ymd');
+        
+        $attributes = [
+            'daily_code' => $todayCode,
+            'company_id' => $companyId,
+        ];
+        
+        if ($branchId !== null) {
+            $attributes['branch_id'] = $branchId;
+        }
 
         return DailyBatch::firstOrCreate(
-            [
-                'daily_code' => $todayCode,
-                'company_id' => $companyId,
-            ],
+            $attributes,
             ['date' => Carbon::now()]
         );
+    }
+
+    /**
+     * Assign optimized routes from the Batch process to drivers.
+     * Takes the results from IntelligentAssignmentService::generateOptimizedRoutes.
+     */
+    public function assignBatchRoutes(array $optimizedResults, Coordinator $coordinator, int $branchId): void
+    {
+        DB::transaction(function () use ($optimizedResults, $coordinator, $branchId) {
+            $batch = $this->getOrCreateDailyBatch($coordinator->company_id, $branchId);
+            
+            foreach ($optimizedResults as $result) {
+                $driver = $result['driver'];
+                $packages = $result['ordered_packages'];
+                
+                // Clear out existing pending deliveries for this driver if we want to overwrite
+                // For this implementation, we will append or create new.
+                
+                $order = 1;
+                foreach ($packages as $package) {
+                    
+                    // Create Route object (Optional depending on how you structure Route table vs Delivery table)
+                    // We'll just create the Delivery directly as before, but with the exact order
+                    
+                    $delivery = Delivery::updateOrCreate(
+                        [
+                            'package_id' => $package->id,
+                            'daily_batch_id' => $batch->id,
+                        ],
+                        [
+                            'company_id' => $coordinator->company_id,
+                            'driver_id' => $driver->id,
+                            'coordinator_id' => $coordinator->id,
+                            'delivery_order' => $order,
+                            'status' => DeliveryStatus::ASSIGNED->value,
+                            'assigned_at' => now(),
+                        ]
+                    );
+
+                    // Generate QR Code URL
+                    if (empty($delivery->qr_url)) {
+                        $qrUrl = "/delivery/{$delivery->id}";
+                        $delivery->update(['qr_url' => $qrUrl]);
+                    }
+
+                    // Update Package Status
+                    $package->update(['status' => 'assigned']);
+                    
+                    $order++;
+                }
+            }
+        });
     }
 }

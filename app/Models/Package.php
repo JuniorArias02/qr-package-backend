@@ -20,9 +20,9 @@ class Package extends Model
         'status',
     ];
 
-    public function address(): BelongsTo
+    public function geocodedAddress(): BelongsTo
     {
-        return $this->belongsTo(Address::class);
+        return $this->belongsTo(Address::class, 'address_id');
     }
 
     public function delivery(): HasOne

@@ -29,6 +29,13 @@ Route::prefix('v1')->group(function () {
         });
     });
 
+    // Notifications
+    Route::group(['prefix' => 'notifications', 'middleware' => 'auth:api'], function () {
+        Route::get('/', [\App\Http\Controllers\V1\NotificationController::class, 'index']);
+        Route::post('read-all', [\App\Http\Controllers\V1\NotificationController::class, 'markAllAsRead']);
+        Route::patch('{id}/read', [\App\Http\Controllers\V1\NotificationController::class, 'markAsRead']);
+    });
+
     // ─── Super Admin Routes ───
     Route::group(['prefix' => 'super-admin', 'middleware' => ['auth:api', 'super_admin']], function () {
         // Companies
@@ -95,9 +102,22 @@ Route::prefix('v1')->group(function () {
         Route::post('scan', [DeliveryController::class, 'scanPackage']);
         Route::post('register-package', [DeliveryController::class, 'registerPackage']);
         Route::post('assign', [DeliveryController::class, 'assignPackage']);
+        Route::post('generate-batch', [DeliveryController::class, 'generateBatchRoutes']);
         Route::get('info/{package_reference}/{delivery_id}', [DeliveryController::class, 'getDeliveryInfo']);
         Route::post('{id}/status', [DeliveryController::class, 'updateStatus']);
         // Alias for frontend driver service
         Route::post('{id}/delivered', [DeliveryController::class, 'updateStatus']);
+    });
+
+    // Master Data Routes
+    Route::group(['middleware' => ['auth:api', 'company.active']], function () {
+        // Geocoding
+        Route::post('geocode', [\App\Http\Controllers\V1\LocationController::class, 'geocode']);
+
+        // Branches
+        Route::get('branches', [\App\Http\Controllers\V1\BranchController::class, 'index']);
+        Route::post('branches', [\App\Http\Controllers\V1\BranchController::class, 'store']);
+        Route::post('branches/{id}', [\App\Http\Controllers\V1\BranchController::class, 'update']);
+        Route::delete('branches/{id}', [\App\Http\Controllers\V1\BranchController::class, 'destroy']);
     });
 });
