@@ -402,6 +402,7 @@ class DeliveryController extends Controller
         } else {
             // Treat as failure or other observation
             $delivery->update([
+                'status' => \App\Enums\DeliveryStatus::FAILED->value,
                 'observation' => $request->observation,
             ]);
 
@@ -414,6 +415,54 @@ class DeliveryController extends Controller
         return response()->json([
             'status' => 'success',
             'mensaje' => 'Estado actualizado correctamente',
+            'objeto' => $delivery
+        ]);
+    }
+
+    #[OA\Post(
+        path: "/api/v1/delivery/{id}/requeue",
+        summary: "Return a failed or unassigned delivery back to the pending pool",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        parameters: [
+            new OA\Parameter(
+                name: "id",
+                in: "path",
+                required: true,
+                schema: new OA\Schema(type: "integer")
+            )
+        ],
+        responses: [
+            new OA\Response(response: 200, description: "Delivery requeued successfully")
+        ]
+    )]
+    public function requeueDelivery($id)
+    {
+        $user = auth('api')->user();
+        if (!in_array($user->role, ['coordinator', 'admin', 'company_admin', 'super_admin'])) {
+            return response()->json(['status' => 'error', 'mensaje' => 'Unauthorized'], 403);
+        }
+
+        $delivery = \App\Models\Delivery::findOrFail($id);
+
+        if ($delivery->status === 'delivered') {
+            return response()->json(['status' => 'error', 'mensaje' => 'Cannot requeue a delivered package'], 422);
+        }
+
+        $delivery->update([
+            'status' => \App\Enums\DeliveryStatus::PENDING_ASSIGNMENT->value,
+            'driver_id' => null,
+            'observation' => null,
+            'assigned_at' => null,
+        ]);
+
+        if ($delivery->package) {
+            $delivery->package->update(['status' => 'pending']);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'mensaje' => 'Paquete devuelto a la lista de pendientes exitosamente',
             'objeto' => $delivery
         ]);
     }
@@ -488,6 +537,45 @@ class DeliveryController extends Controller
     /**
      * Get history of deliveries for the authenticated driver.
      */
+    #[OA\Get(
+        path: "/api/v1/delivery/{id}/popup-details",
+        summary: "Get lightweight delivery DTO for map popups",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        parameters: [
+            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer"))
+        ],
+        responses: [
+            new OA\Response(response: 200, description: "Delivery Popup DTO")
+        ]
+    )]
+    public function getPopupDetails($id)
+    {
+        $delivery = \App\Models\Delivery::with(['package', 'driver.user'])->find($id);
+
+        if (!$delivery) {
+            return response()->json(['status' => 'error', 'mensaje' => 'Entrega no encontrada'], 404);
+        }
+
+        // Lightweight DTO
+        $dto = [
+            'id' => $delivery->id,
+            'status' => $delivery->status,
+            'observation' => $delivery->observation,
+            'assigned_at' => $delivery->assigned_at ? $delivery->assigned_at->format('Y-m-d H:i') : null,
+            'delivered_at' => $delivery->delivered_at ? $delivery->delivered_at->format('Y-m-d H:i') : null,
+            'package_reference' => $delivery->package ? $delivery->package->package_reference : 'N/A',
+            'address' => $delivery->package ? $delivery->package->address : 'Sin dirección',
+            'driver_name' => ($delivery->driver && $delivery->driver->user) ? $delivery->driver->user->name : 'Sin conductor'
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'mensaje' => 'Detalles de la entrega recuperados',
+            'objeto' => $dto
+        ]);
+    }
+
     public function getHistory()
     {
         $user = auth('api')->user();
@@ -544,6 +632,107 @@ class DeliveryController extends Controller
 
         return response()->json([
             'status' => 'success',
+            'objeto' => $deliveries
+        ]);
+    }
+
+    #[OA\Get(
+        path: "/api/v1/delivery/active-routes",
+        summary: "Get active routes for all drivers today",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        responses: [
+            new OA\Response(response: 200, description: "Active routes grouped by driver")
+        ]
+    )]
+    public function getActiveRoutes(Request $request)
+    {
+        $user = auth('api')->user();
+        if (!in_array($user->role, ['coordinator', 'admin', 'company_admin', 'super_admin'])) {
+            return response()->json(['status' => 'error', 'mensaje' => 'Unauthorized'], 403);
+        }
+
+        $coordinator = $user->coordinator;
+        
+        $deliveries = \App\Models\Delivery::with(['package.geocodedAddress', 'driver.user'])
+            ->where('status', \App\Enums\DeliveryStatus::ASSIGNED->value)
+            ->whereNotNull('driver_id')
+            ->whereDate('assigned_at', today())
+            ->when($coordinator, function ($query) use ($coordinator) {
+                // If it's a coordinator, scope by their company
+                return $query->whereHas('driver', function ($q) use ($coordinator) {
+                    $q->where('company_id', $coordinator->company_id);
+                });
+            })
+            ->orderBy('driver_id')
+            ->orderBy('delivery_order')
+            ->get();
+
+        // Group by driver
+        $grouped = $deliveries->groupBy('driver_id')->map(function ($driverDeliveries) {
+            $first = $driverDeliveries->first();
+            $driverData = $first->driver ? [
+                'id' => $first->driver->id,
+                'name' => $first->driver->user ? $first->driver->user->name : 'Unknown',
+            ] : null;
+
+            return [
+                'driver' => $driverData,
+                'route' => $driverDeliveries->map(function ($del) {
+                    return [
+                        'delivery_id' => $del->id,
+                        'package_reference' => $del->package ? $del->package->package_reference : null,
+                        'delivery_order' => $del->delivery_order,
+                        'latitude' => $del->package && $del->package->geocodedAddress ? $del->package->geocodedAddress->latitude : null,
+                        'longitude' => $del->package && $del->package->geocodedAddress ? $del->package->geocodedAddress->longitude : null,
+                    ];
+                })->filter(fn($item) => $item['latitude'] !== null)->values()
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => 'success',
+            'mensaje' => 'Active routes retrieved',
+            'objeto' => $grouped
+        ]);
+    }
+
+    #[OA\Get(
+        path: "/api/v1/delivery/failed",
+        summary: "Get list of failed deliveries",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        responses: [
+            new OA\Response(response: 200, description: "List of failed deliveries")
+        ]
+    )]
+    public function getFailed(Request $request)
+    {
+        $user = auth('api')->user();
+        
+        if (!in_array($user->role, ['coordinator', 'admin', 'company_admin', 'super_admin'])) {
+            return response()->json(['status' => 'error', 'mensaje' => 'Unauthorized'], 403);
+        }
+
+        $coordinator = $user->coordinator;
+
+        $deliveries = \App\Models\Delivery::with(['package.geocodedAddress', 'driver.user'])
+            ->where(function ($query) {
+                $query->where('status', \App\Enums\DeliveryStatus::FAILED->value)
+                      ->orWhereNotNull('observation');
+            })
+            ->where('status', '!=', 'delivered')
+            ->when($coordinator, function ($query) use ($coordinator) {
+                return $query->whereHas('driver', function ($q) use ($coordinator) {
+                    $q->where('company_id', $coordinator->company_id);
+                });
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'mensaje' => 'Failed deliveries retrieved',
             'objeto' => $deliveries
         ]);
     }

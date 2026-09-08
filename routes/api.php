@@ -96,6 +96,8 @@ Route::prefix('v1')->group(function () {
     // Delivery Flow Routes
     Route::group(['prefix' => 'delivery', 'middleware' => ['auth:api', 'company.active']], function () {
         Route::get('pending', [DeliveryController::class, 'getPending']);
+        Route::get('failed', [DeliveryController::class, 'getFailed']);
+        Route::get('active-routes', [DeliveryController::class, 'getActiveRoutes']);
         Route::get('my-deliveries', [DeliveryController::class, 'getMyDeliveries']);
         Route::get('assigned', [DeliveryController::class, 'getAssigned']);
         Route::get('history', [DeliveryController::class, 'getHistory']);
@@ -107,6 +109,8 @@ Route::prefix('v1')->group(function () {
         Route::post('{id}/status', [DeliveryController::class, 'updateStatus']);
         // Alias for frontend driver service
         Route::post('{id}/delivered', [DeliveryController::class, 'updateStatus']);
+        Route::post('{id}/requeue', [DeliveryController::class, 'requeueDelivery']);
+        Route::get('{id}/popup-details', [DeliveryController::class, 'getPopupDetails']);
     });
 
     // Master Data Routes
