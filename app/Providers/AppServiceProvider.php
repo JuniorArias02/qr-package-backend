@@ -15,7 +15,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(GeocodingProviderInterface::class, GeoapifyProvider::class);
+        $this->app->bind(GeocodingProviderInterface::class, function ($app) {
+            return new \App\Services\Geocoding\FallbackGeocodingProvider([
+                new \App\Services\Geocoding\GeoapifyProvider(),
+                new \App\Services\Geocoding\NominatimProvider(),
+            ]);
+        });
+        
         $this->app->bind(RoutingProviderInterface::class, GeoapifyRoutingProvider::class);
     }
 

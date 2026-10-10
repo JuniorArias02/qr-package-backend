@@ -95,10 +95,10 @@ class DeliveryController extends Controller
             ]);
         }
 
-        if ($package->status !== 'pending') {
+        if ($package->status === 'delivered') {
             return response()->json([
                 'status' => 'error',
-                'mensaje' => "Package is already {$package->status}",
+                'mensaje' => "Package is already delivered",
                 'objeto' => $package
             ], 422);
         }
@@ -261,12 +261,22 @@ class DeliveryController extends Controller
             ], 422);
         }
 
+        // Validate driver branch matches package branch
+        if ($driver->branch_id !== $package->branch_id) {
+            return response()->json([
+                'status' => 'error',
+                'mensaje' => 'El conductor pertenece a una sede distinta a la del paquete.',
+                'objeto' => null
+            ], 422);
+        }
+
         // If delivery already exists (was pending), update it instead of creating a new one
-        $existingDelivery = \App\Models\Delivery::where('package_id', $package->id)->first();
+        $existingDelivery = \App\Models\Delivery::where('package_id', $package->id)->latest('id')->first();
         if ($existingDelivery) {
             $existingDelivery->update([
                 'driver_id' => $driver->id,
                 'status' => \App\Enums\DeliveryStatus::ASSIGNED->value,
+                'observation' => null,
                 'assigned_at' => now(),
             ]);
             $package->update(['status' => 'assigned']);
@@ -318,6 +328,7 @@ class DeliveryController extends Controller
         $request->validate([
             'package_reference' => 'required|string|unique:packages,package_reference',
             'address' => 'required|string',
+            'branch_id' => 'required|exists:branches,id',
             'driver_id' => 'nullable|exists:drivers,id'
         ]);
 
@@ -330,6 +341,7 @@ class DeliveryController extends Controller
         $package = Package::create([
             'package_reference' => $request->package_reference,
             'address' => $request->address,
+            'branch_id' => $request->branch_id,
             'zone' => 'Sin Zona',
             'status' => 'pending'
         ]);
@@ -754,11 +766,20 @@ class DeliveryController extends Controller
             return response()->json(['status' => 'error', 'mensaje' => 'Unauthorized to view pending deliveries'], 403);
         }
 
+        // Get the latest delivery ID for each package
+        $latestDeliveryIds = \App\Models\Delivery::selectRaw('MAX(id) as id')
+            ->groupBy('package_id')
+            ->pluck('id');
+
         $deliveries = \App\Models\Delivery::with(['package.geocodedAddress', 'route'])
+            ->whereIn('id', $latestDeliveryIds)
             ->where(function ($query) {
                 $query->where('status', \App\Enums\DeliveryStatus::PENDING_ASSIGNMENT->value)
-                      ->orWhereNull('driver_id');
+                      ->orWhereNull('driver_id')
+                      ->orWhere('status', \App\Enums\DeliveryStatus::FAILED->value)
+                      ->orWhereNotNull('observation');
             })
+            ->where('status', '!=', 'delivered')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -827,7 +848,281 @@ class DeliveryController extends Controller
                 ]
             ]);
         } catch (\Exception $e) {
-            return response()->json(['status' => 'error', 'mensaje' => $e->getMessage()], 500);
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    #[OA\Post(
+        path: "/api/v1/delivery/manual-assign",
+        summary: "Manually assign orphan packages to a driver",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: "driver_id", type: "integer", example: 1),
+                    new OA\Property(property: "package_ids", type: "array", items: new OA\Items(type: "integer"))
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: "Packages assigned manually"),
+            new OA\Response(response: 422, description: "Validation error")
+        ]
+    )]
+    public function manualAssign(Request $request)
+    {
+        $request->validate([
+            'driver_id' => 'required|exists:drivers,id',
+            'package_ids' => 'required|array|min:1',
+            'package_ids.*' => 'exists:packages,id',
+        ]);
+
+        $coordinator = auth('api')->user()->coordinator;
+        
+        if (!$coordinator) {
+            return response()->json(['status' => 'error', 'message' => 'Only coordinators can generate assignments'], 403);
+        }
+
+        try {
+            $driver = \App\Models\Driver::findOrFail($request->driver_id);
+            $packages = \App\Models\Package::whereIn('id', $request->package_ids)
+                ->where('status', '!=', 'delivered')
+                ->get();
+
+            if ($packages->isEmpty()) {
+                return response()->json(['status' => 'error', 'message' => 'Ninguno de los paquetes seleccionados está disponible para asignar.'], 400);
+            }
+
+            // Validar que todos los paquetes pertenezcan a la misma sede del conductor
+            $invalidPackages = $packages->filter(function ($pkg) use ($driver) {
+                return $pkg->branch_id !== $driver->branch_id;
+            });
+
+            if ($invalidPackages->isNotEmpty()) {
+                return response()->json([
+                    'status' => 'error', 
+                    'message' => 'No puedes asignar paquetes de otra sede a este conductor.'
+                ], 422);
+            }
+
+            // Create a custom batch for manual dispatch
+            $todayCode = \Carbon\Carbon::now()->format('Ymd') . "-MANUAL-C" . $coordinator->company_id;
+            
+            $batch = \App\Models\DailyBatch::firstOrCreate(
+                [
+                    'daily_code' => $todayCode,
+                    'company_id' => $coordinator->company_id,
+                ],
+                ['date' => \Carbon\Carbon::now()]
+            );
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($packages, $driver, $coordinator, $batch) {
+                foreach ($packages as $package) {
+                    $delivery = \App\Models\Delivery::updateOrCreate(
+                        [
+                            'package_id' => $package->id,
+                            'daily_batch_id' => $batch->id,
+                        ],
+                        [
+                            'company_id' => $coordinator->company_id,
+                            'driver_id' => $driver->id,
+                            'coordinator_id' => $coordinator->id,
+                            'delivery_order' => 1, // Manual assign doesn't care about order
+                            'status' => \App\Enums\DeliveryStatus::ASSIGNED->value,
+                            'observation' => null,
+                            'assigned_at' => now(),
+                        ]
+                    );
+
+                    $qrUrl = "/delivery/{$delivery->id}";
+                    $delivery->update(['qr_url' => $qrUrl]);
+
+                    $package->update(['status' => 'assigned']);
+                }
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Paquetes asignados manualmente con éxito.',
+                'assigned_count' => $packages->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    #[OA\Get(
+        path: "/api/v1/delivery/undelivered-locations",
+        summary: "Get locations of all undelivered packages",
+        tags: ["Delivery"],
+        security: [["bearerAuth" => []]],
+        responses: [
+            new OA\Response(response: 200, description: "Undelivered package locations retrieved")
+        ]
+    )]
+    public function undeliveredLocations()
+    {
+        $user = auth('api')->user();
+        if (!in_array($user->role, ['coordinator', 'admin', 'company_admin', 'super_admin'])) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $packages = \App\Models\Package::with('geocodedAddress')
+            ->where('company_id', $user->company_id)
+            ->whereIn('status', ['pending', 'assigned', 'failed', 'returned'])
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Undelivered package locations retrieved',
+            'data' => \App\Http\Resources\V1\PackageLocationResource::collection($packages),
+        ]);
+    }
+
+    #[OA\Post(
+        path: "/api/v1/driver/deliveries/reorder",
+        summary: "Manually reorder the current driver's deliveries",
+        tags: ["Driver"],
+        security: [["bearerAuth" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: "delivery_ids", type: "array", items: new OA\Items(type: "integer"))
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: "Deliveries reordered successfully")
+        ]
+    )]
+    public function reorder(Request $request)
+    {
+        $request->validate([
+            'delivery_ids' => 'required|array',
+            'delivery_ids.*' => 'exists:deliveries,id'
+        ]);
+
+        $user = auth('api')->user();
+        if ($user->role !== 'driver' || !$user->driver) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $driverId = $user->driver->id;
+        $deliveryIds = $request->delivery_ids;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($deliveryIds, $driverId) {
+            foreach ($deliveryIds as $index => $id) {
+                // We only update if it belongs to the driver
+                \App\Models\Delivery::where('id', $id)
+                    ->where('driver_id', $driverId)
+                    ->update(['delivery_order' => $index + 1]);
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Deliveries reordered successfully'
+        ]);
+    }
+
+    #[OA\Post(
+        path: "/api/v1/driver/deliveries/optimize",
+        summary: "Auto-optimize route for the current driver's deliveries",
+        tags: ["Driver"],
+        security: [["bearerAuth" => []]],
+        responses: [
+            new OA\Response(response: 200, description: "Deliveries optimized successfully")
+        ]
+    )]
+    public function optimizeRoute()
+    {
+        $user = auth('api')->user();
+        if ($user->role !== 'driver' || !$user->driver) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $driver = $user->driver;
+        $branch = $driver->branch;
+
+        if (!$branch || !$branch->address || !$branch->address->latitude || !$branch->address->longitude) {
+            return response()->json(['status' => 'error', 'message' => 'La sede del conductor no tiene coordenadas para optimizar la ruta.'], 400);
+        }
+
+        $deliveries = \App\Models\Delivery::where('driver_id', $driver->id)
+            ->whereIn('status', [\App\Enums\DeliveryStatus::ASSIGNED->value])
+            ->with('package.geocodedAddress')
+            ->get();
+
+        $validDeliveries = collect();
+        $unGeocodedDeliveries = collect();
+
+        foreach ($deliveries as $del) {
+            if ($del->package && $del->package->geocodedAddress && $del->package->geocodedAddress->latitude) {
+                $validDeliveries->push($del);
+            } else {
+                $unGeocodedDeliveries->push($del);
+            }
+        }
+
+        if ($validDeliveries->count() < 1) {
+            return response()->json(['status' => 'success', 'message' => 'No hay suficientes paquetes con coordenadas válidas para optimizar.']);
+        }
+
+        $points = [
+            [
+                'id' => 'hub',
+                'lat' => $branch->address->latitude,
+                'lon' => $branch->address->longitude,
+            ]
+        ];
+
+        foreach ($validDeliveries as $del) {
+            $points[] = [
+                'id' => $del->id,
+                'lat' => $del->package->geocodedAddress->latitude,
+                'lon' => $del->package->geocodedAddress->longitude,
+            ];
+        }
+
+        // Use injected RoutingProviderInterface via app()
+        $routingProvider = app(\App\Contracts\RoutingProviderInterface::class);
+        $optimizedPoints = $routingProvider->optimizeRoute($points);
+
+        if (!$optimizedPoints) {
+            return response()->json(['status' => 'error', 'message' => 'Falló la optimización de ruta.'], 500);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($optimizedPoints, $driver, $unGeocodedDeliveries) {
+            $order = 1;
+            foreach ($optimizedPoints as $point) {
+                if ($point['id'] !== 'hub') {
+                    \App\Models\Delivery::where('id', $point['id'])
+                        ->where('driver_id', $driver->id)
+                        ->update(['delivery_order' => $order]);
+                    $order++;
+                }
+            }
+            
+            // Append ungeocoded packages at the end
+            foreach ($unGeocodedDeliveries as $del) {
+                \App\Models\Delivery::where('id', $del->id)
+                    ->where('driver_id', $driver->id)
+                    ->update(['delivery_order' => $order]);
+                $order++;
+            }
+        });
+
+        $message = 'Ruta optimizada con éxito.';
+        if ($unGeocodedDeliveries->count() > 0) {
+            $message .= ' (' . $unGeocodedDeliveries->count() . ' paquetes quedaron al final porque no tienen coordenadas exactas).';
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $message
+        ]);
     }
 }

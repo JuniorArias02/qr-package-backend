@@ -54,9 +54,11 @@ Route::prefix('v1')->group(function () {
         Route::get('deliveries',               [SuperAdminController::class, 'getAllDeliveries']);
     });
 
-    // Driver Specific Analytics
+    // Driver Specific Routes
     Route::group(['prefix' => 'driver', 'middleware' => ['auth:api', 'company.active']], function () {
         Route::get('analytics/dashboard', [DriverAnalyticsController::class, 'getDashboardData']);
+        Route::put('profile/branch', [DriverController::class, 'updateBranch']);
+        Route::post('finish-route', [DriverController::class, 'finishRoute']);
     });
 
     // Admin Routes
@@ -90,7 +92,10 @@ Route::prefix('v1')->group(function () {
     Route::group(['prefix' => 'routes', 'middleware' => ['auth:api', 'company.active']], function () {
         Route::get('/', [RouteController::class, 'index']);
         Route::post('/', [RouteController::class, 'store']);
-        Route::post('{id}/points', [RouteController::class, 'addPoint']);
+        Route::get('{id}', [RouteController::class, 'show']);
+        Route::put('{id}', [RouteController::class, 'update']);
+        Route::delete('{id}', [RouteController::class, 'destroy']);
+        Route::post('{id}/assign-drivers', [RouteController::class, 'assignDrivers']);
     });
 
     // Delivery Flow Routes
@@ -104,7 +109,9 @@ Route::prefix('v1')->group(function () {
         Route::post('scan', [DeliveryController::class, 'scanPackage']);
         Route::post('register-package', [DeliveryController::class, 'registerPackage']);
         Route::post('assign', [DeliveryController::class, 'assignPackage']);
+        Route::get('undelivered-locations', [DeliveryController::class, 'undeliveredLocations']);
         Route::post('generate-batch', [DeliveryController::class, 'generateBatchRoutes']);
+        Route::post('manual-assign', [DeliveryController::class, 'manualAssign']);
         Route::get('info/{package_reference}/{delivery_id}', [DeliveryController::class, 'getDeliveryInfo']);
         Route::post('{id}/status', [DeliveryController::class, 'updateStatus']);
         // Alias for frontend driver service

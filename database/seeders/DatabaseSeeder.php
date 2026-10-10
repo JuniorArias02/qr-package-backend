@@ -19,10 +19,9 @@ class DatabaseSeeder extends Seeder
         // 1. Admin User
         User::create([
             'name' => 'Admin QR',
-            'email' => 'admin@qrpackage.com',
-            'password' => Hash::make('password'),
+            'email' => 'junior.arias02yt@gmail.com',
+            'password' => Hash::make('qweasdzxc'),
             'role' => 'super_admin'
         ]);
     }
 }
- 

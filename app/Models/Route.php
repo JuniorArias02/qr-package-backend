@@ -12,8 +12,10 @@ class Route extends Model
 
     protected $fillable = [
         'company_id',
+        'branch_id',
         'name',
         'description',
+        'polygon',
         'active',
     ];
 
@@ -21,9 +23,23 @@ class Route extends Model
         'active' => 'boolean',
     ];
 
+    protected $hidden = [
+        'polygon',
+    ];
+
     public function points(): HasMany
     {
         return $this->hasMany(RoutePoint::class);
+    }
+
+    public function branch(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function drivers(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Driver::class);
     }
 
     public function deliveries(): HasMany

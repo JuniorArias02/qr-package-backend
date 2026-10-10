@@ -13,11 +13,21 @@ class Package extends Model
     use BelongsToCompany;
     protected $fillable = [
         'company_id',
+        'branch_id',
         'address_id',
         'package_reference',
         'address',
         'zone',
         'status',
+        'latitude',
+        'longitude',
+        'is_geolocated',
+    ];
+
+    protected $casts = [
+        'is_geolocated' => 'boolean',
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
     ];
 
     public function geocodedAddress(): BelongsTo
@@ -28,5 +38,10 @@ class Package extends Model
     public function delivery(): HasOne
     {
         return $this->hasOne(Delivery::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 }

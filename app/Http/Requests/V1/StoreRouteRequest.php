@@ -17,10 +17,11 @@ class StoreRouteRequest extends FormRequest
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'active' => 'boolean',
-            'points' => 'nullable|array',
-            'points.*.latitude' => 'required|numeric|between:-90,90',
-            'points.*.longitude' => 'required|numeric|between:-180,180',
-            'points.*.radius_km' => 'nullable|numeric|min:0.1',
+            'branch_id' => 'required|exists:branches,id',
+            'polygon_coordinates' => 'required|array|min:3',
+            'polygon_coordinates.*' => 'array|size:2',
+            'polygon_coordinates.*.0' => 'required|numeric', // latitude
+            'polygon_coordinates.*.1' => 'required|numeric', // longitude
         ];
     }
 }

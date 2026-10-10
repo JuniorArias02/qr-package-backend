@@ -95,9 +95,11 @@ class DeliveryService
         }
 
         // Fallback to the first active driver if no package or intelligent routing fails
-        return $coordinator->drivers()
-            ->where('active', true)
-            ->first();
+        $query = $coordinator->drivers()->where('active', true);
+        if ($package) {
+            $query->where('branch_id', $package->branch_id);
+        }
+        return $query->first();
     }
 
     /**
@@ -114,7 +116,10 @@ class DeliveryService
      */
     protected function getOrCreateDailyBatch(?int $companyId = null, ?int $branchId = null): DailyBatch
     {
+        // Add companyId and branchId to the daily_code to avoid unique constraint violations
         $todayCode = Carbon::now()->format('Ymd');
+        if ($companyId) $todayCode .= "-C{$companyId}";
+        if ($branchId) $todayCode .= "-B{$branchId}";
         
         $attributes = [
             'daily_code' => $todayCode,
@@ -164,6 +169,7 @@ class DeliveryService
                             'coordinator_id' => $coordinator->id,
                             'delivery_order' => $order,
                             'status' => DeliveryStatus::ASSIGNED->value,
+                            'observation' => null,
                             'assigned_at' => now(),
                         ]
                     );

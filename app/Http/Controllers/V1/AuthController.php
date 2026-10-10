@@ -98,10 +98,22 @@ class AuthController extends Controller
     )]
     public function me()
     {
+        $user = auth('api')->user();
+        
+        if ($user->role === 'driver') {
+            $user->load('driver');
+            $user->branch_id = $user->driver?->branch_id;
+            unset($user->driver); // Limpiar para no sobrecargar el JSON
+        } elseif ($user->role === 'coordinator') {
+            $user->load('coordinator');
+            $user->branch_id = $user->coordinator?->branch_id;
+            unset($user->coordinator);
+        }
+
         return response()->json([
             'status' => 'success',
             'mensaje' => 'Usuario recuperado',
-            'objeto' => auth('api')->user()
+            'objeto' => $user
         ]);
     }
 
@@ -250,6 +262,18 @@ class AuthController extends Controller
      */
     protected function respondWithToken($token)
     {
+        $user = auth('api')->user()->load('company');
+        
+        if ($user->role === 'driver') {
+            $user->load('driver');
+            $user->branch_id = $user->driver?->branch_id;
+            unset($user->driver);
+        } elseif ($user->role === 'coordinator') {
+            $user->load('coordinator');
+            $user->branch_id = $user->coordinator?->branch_id;
+            unset($user->coordinator);
+        }
+
         return response()->json([
             'status' => 'success',
             'mensaje' => 'Login exitoso',
@@ -257,7 +281,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'bearer',
                 'expires_in' => auth('api')->factory()->getTTL() * 60,
-                'user' => auth('api')->user()->load('company')
+                'user' => $user
             ]
         ]);
     }

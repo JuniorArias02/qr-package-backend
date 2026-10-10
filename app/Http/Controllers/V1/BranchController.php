@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Http\Resources\V1\BranchResource;
 use Illuminate\Http\Request;
 
 class BranchController extends Controller
@@ -15,19 +16,19 @@ class BranchController extends Controller
     {
         $user = auth('api')->user();
         
-        $query = Branch::with('address');
+        $query = Branch::query();
         
         // If the user belongs to a specific company, filter by it
         if ($user && $user->company_id) {
             $query->where('company_id', $user->company_id);
         }
 
-        $branches = $query->get();
+        $branches = $query->select('id', 'name', 'latitude', 'longitude')->get();
 
         return response()->json([
             'status' => 'success',
-            'mensaje' => 'Sedes obtenidas correctamente',
-            'objeto' => $branches
+            'message' => 'Sedes obtenidas correctamente',
+            'data' => BranchResource::collection($branches)
         ]);
     }
 
@@ -61,8 +62,8 @@ class BranchController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'mensaje' => 'Sede creada correctamente',
-            'objeto' => $branch->load('address')
+            'message' => 'Sede creada correctamente',
+            'data' => new BranchResource($branch->load('address'))
         ], 201);
     }
 
@@ -116,8 +117,8 @@ class BranchController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'mensaje' => 'Sede actualizada correctamente',
-            'objeto' => $branch->load('address')
+            'message' => 'Sede actualizada correctamente',
+            'data' => new BranchResource($branch->load('address'))
         ]);
     }
 
@@ -138,8 +139,7 @@ class BranchController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'mensaje' => 'Sede eliminada correctamente',
-            'objeto' => null
+            'message' => 'Sede eliminada correctamente',
         ]);
     }
 }

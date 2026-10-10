@@ -38,8 +38,10 @@ class IntelligentAssignmentService
         $packageLat = $package->geocodedAddress->latitude;
         $packageLon = $package->geocodedAddress->longitude;
 
-        // 1. Get all active drivers for this company
-        $query = Driver::where('active', true);
+        // 1. Get all active drivers for this company and same branch as package
+        $query = Driver::where('active', true)
+            ->where('branch_id', $package->branch_id);
+            
         if ($companyId) {
             $query->where('company_id', $companyId);
         }

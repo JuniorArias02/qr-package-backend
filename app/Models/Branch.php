@@ -26,4 +26,9 @@ class Branch extends Model
     {
         return $this->belongsTo(Address::class);
     }
+
+    public function drivers()
+    {
+        return $this->hasMany(Driver::class);
+    }
 }

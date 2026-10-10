@@ -11,7 +11,7 @@ use App\Traits\BelongsToCompany;
 class Driver extends Model
 {
     use BelongsToCompany;
-    protected $fillable = ['user_id', 'coordinator_id', 'company_id', 'active'];
+    protected $fillable = ['user_id', 'coordinator_id', 'company_id', 'branch_id', 'active'];
 
     protected $casts = [
         'active' => 'boolean',
@@ -25,6 +25,16 @@ class Driver extends Model
     public function coordinator(): BelongsTo
     {
         return $this->belongsTo(Coordinator::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function routes(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Route::class);
     }
 
     public function deliveries(): HasMany
